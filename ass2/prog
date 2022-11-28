@@ -1,0 +1,369 @@
+#!/usr/bin/python3
+# COMP3311 21T3 Ass2 ... progression check for a given student
+
+import sys
+import psycopg2
+import re
+from helpers import getStudent, getProgram, getStream, printStudentInfo, getSubjectInfo, getStudentEnrolment, printOfferedByName, getProgramRules, getStreamRules, getStreamId, getRuleInfo, printAOGInfo, checkAOGInfo, getReqs, checkADK, checkSpecialCase, getCourseName, sortEnrolment, sortLeftDict, ofOrFrom
+
+# define any local helper functions here
+
+### set up some globals
+UOC = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-', 'HD', 'DN', 'CR', 'PS', 'XE', 'T', 'SY', 'EC', 'NC']
+WAM = ['HD', 'DN', 'CR', 'PS', 'AF', 'FL', 'UF']
+ZERO = ['AF', 'FL', 'UF']
+NOTHING = ['AS', 'AW', 'PW', 'RD', 'NF', 'LE', 'PE', 'WD', 'WJ']
+DASH = '-'
+
+usage = f"Usage: {sys.argv[0]} zID [Program Stream]"
+db = None
+
+### process command-line args
+
+argc = len(sys.argv)
+if argc < 2:
+  print(usage)
+  exit(1)
+zid = sys.argv[1]
+if zid[0] == 'z':
+  zid = zid[1:8]
+digits = re.compile("^\d{7}$")
+if not digits.match(zid):
+  print("Invalid student ID")
+  exit(1)
+
+progCode = None
+strmCode = None
+
+if argc == 4:
+  progCode = sys.argv[2]
+  strmCode = sys.argv[3]
+
+# manipulate database
+
+try:
+  db = psycopg2.connect("dbname=mymyunsw")
+  stuInfo = getStudent(db,zid)
+  if not stuInfo:
+    print(f"Invalid student id {zid}")
+    exit()
+
+  if progCode:
+    progInfo = getProgram(db,progCode)
+    if not progInfo:
+      print(f"Invalid program code {progCode}")
+      exit()
+
+  if strmCode:
+    strmInfo = getStream(db,strmCode)
+    if not strmInfo:
+      print(f"Invalid program code {strmCode}")
+      exit()
+  printStudentInfo(db, zid)
+  if progCode and strmCode:
+  # if there is a program/stream
+  # show progression check on supplied program/stream
+    program = progCode
+    cur = db.cursor()
+    query = "select Programs.name from Programs where Programs.id = %s"
+    cur.execute(query, [program])
+    p_name = cur.fetchone()
+    cur.close()
+    stream = strmCode
+    cur = db.cursor()
+    query = "select Streams.name from Streams where Streams.code = %s"
+    cur.execute(query, [stream])
+    s_name = cur.fetchone()
+    cur.close()
+    print(f"  {program} {p_name[0]}")
+    print(f"  {stream} {s_name[0]}")
+  else:
+  #  show progression check on most recent program/stream enrolment
+    info = getStudentEnrolment(db, zid)
+    print(f"  {info[0]} {info[1]}")
+    print(f"  {info[2]} {info[3]}")
+    program = info[0]
+    stream = info[2]
+  print()
+  print("Completed:")
+  # dictionary with requirements, leftovers and completed
+  required = getReqs(db, program, stream)
+  left = getReqs(db, program, stream)
+  completed = {}
+  # find student's enrolments
+  cur = db.cursor()
+  query = "select Course_enrolments.course, Course_enrolments.mark, Course_enrolments.grade, Subjects.uoc from Course_enrolments join Courses on Course_enrolments.course = Courses.id join Subjects on Subjects.id = Courses.subject where Course_enrolments.student = %s"
+  cur.execute(query, [zid])
+  total_uoc = 0
+  info = cur.fetchall()
+  # sort enrolment
+  info = sortEnrolment(db, info)
+  for tup in info:
+    subject = getSubjectInfo(db, tup[0])
+    # check if this subject is needed in the program
+    rule_ids = getProgramRules(db, program)
+    for rule in rule_ids:
+      info = checkAOGInfo(db, rule, subject[0])
+      if info is not None:
+        # check for ADK courses
+        if checkADK(db, rule, subject[0]):
+          info_final = info + ' + ADK Courses'
+        else:
+          info_final = info
+        break
+    # check if this subject is needed in the stream
+    stream_id = getStreamId(db, stream)
+    stream_rule_ids = getStreamRules(db, stream_id)
+    if info is None:
+      for stream_rule in stream_rule_ids:
+        info = checkAOGInfo(db, stream_rule, subject[0])
+        #print(f"{subject} {info}")
+        if info is not None:
+          # check for ADK courses
+          if checkADK(db, rule, subject[0]):
+            info_final = info + ' + ADK Courses'
+          else:
+            info_final = info
+          break
+    # if the subject is eligible 
+    if info is not None:
+      grade = tup[2]
+      mark = tup[1]
+      if mark is None:
+        mark = DASH
+      if grade is None:
+        grade = DASH
+      if grade in ZERO:
+        print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {tup[2]:5s}fail does not count")
+      elif grade in NOTHING or grade == DASH:
+        print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:>2}   0uoc does not count")
+      else:
+        # if the subject's rule is already part of the completed dictionary
+        if info in left and info in required and info in completed:
+          # add uoc to particular rule
+          completed[info] += tup[3]
+          if checkADK(db, rule, subject[0]):
+            if 'ADK Courses' in completed:
+              completed['ADK Courses'] += tup[3]
+            else:
+              completed['ADK Courses'] = tup[3]
+          # obtain uoc information for rule 
+          if isinstance(required[info], str):
+            uoc = required[info].split(' ')
+          else:
+            uoc = [required[info][0]]
+          # depending on the structure of the dictionary key's component, modify appropriate dictionaries 
+          if len(uoc) == 3 and (int(uoc[0]) >= completed[info] or int(uoc[2]) <= completed[info]):
+            if info in left and completed[info] >= int(uoc[2]):
+              left.pop(info)
+            print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:2s}  {tup[3]:2d}uoc towards {info_final}")
+            total_uoc += int(tup[3])
+          elif len(uoc) == 2 and uoc[0] == '<' and int(uoc[1]) <= completed[info]:
+            if info in left and completed[info] >= int(uoc[1]):
+              left.pop(info)
+            print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:2s}  {tup[3]:2d}uoc towards {info_final}")
+            total_uoc += int(tup[3])
+          elif len(uoc) == 2 and uoc[0] == '>' and int(uoc[1]) >= completed[info]:
+            print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:2s}  {tup[3]:2d}uoc towards {info_final}")
+            total_uoc += int(tup[3])
+          elif len(uoc) == 1 and int(uoc[0]) >= completed[info]:
+            if subject[0] in left[info][1]:
+              left[info][1].remove(subject[0])
+            if info in left and int(uoc[0]) == completed[info]:
+              left.pop(info)
+            print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:2s}  {tup[3]:2d}uoc towards {info_final}")
+            total_uoc += int(tup[3])
+          # if the subject does not satisfy any rules
+          else:
+            # remove uoc
+            completed[info] -= tup[3]
+            if checkADK(db, rule, subject[0]):
+              if 'ADK Courses' in completed:
+                completed['ADK Courses'] += tup[3]
+              else:
+                completed['ADK Courses'] = tup[3]
+            print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:3s}  0uoc does not satisfy any rule")
+        # if the subject's rule is not already part of the completed dictionary
+        elif info in left and info in required and info not in completed:
+          # equate uoc to particular rule
+          completed[info] = tup[3]
+          if checkADK(db, rule, subject[0]):
+            if 'ADK Courses' in completed:
+              completed['ADK Courses'] += tup[3]
+            else:
+              completed['ADK Courses'] = tup[3]
+          # obtain uoc information for rule
+          if isinstance(required[info], str):
+            uoc = required[info].split(' ')
+          else:
+            uoc = [required[info][0]]
+          # depending on the structure of the dictionary key's component, modify appropriate dictionaries 
+          if len(uoc) == 3 and (int(uoc[0]) >= completed[info] or int(uoc[2]) <= completed[info]):
+            if info in left and completed[info] >= int(uoc[2]):
+              left.pop(info)
+            print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:2s}  {tup[3]:2d}uoc towards {info_final}")
+            total_uoc += int(tup[3])
+          elif len(uoc) == 2 and uoc[0] == '<' and int(uoc[1]) <= completed[info]:
+            if info in left and completed[info] >= int(uoc[1]):
+              left.pop(info)
+            print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:2s}  {tup[3]:2d}uoc towards {info_final}")
+            total_uoc += int(tup[3])
+          elif len(uoc) == 2 and uoc[0] == '>' and int(uoc[1]) >= completed[info]:
+            print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:2s}  {tup[3]:2d}uoc towards {info_final}")
+            total_uoc += int(tup[3])
+          elif len(uoc) == 1 and int(uoc[0]) >= completed[info]:
+            if subject[0] in left[info][1]:
+              left[info][1].remove(subject[0])
+            if info in left and int(uoc[0]) == completed[info]:
+              left.pop(info)
+            print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:2s}  {tup[3]:2d}uoc towards {info_final}")
+            total_uoc += int(tup[3])
+          # if the subject does not satisfy any rules
+          else:
+            print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:3s}  0uoc does not satisfy any rule")
+        # if the subject does not satisfy any rules
+        else:
+          print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:3s}  0uoc does not satisfy any rule")
+    # if the subject does not satisfy any rules
+    else:
+      grade = tup[2]
+      mark = tup[1]
+      if mark is None:
+        mark = DASH
+      if grade is None:
+        grade = DASH
+      if grade in ZERO:
+        print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:5s}fail does not count")
+      elif grade in NOTHING or grade == DASH:
+        print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:>2}   0uoc does not count")
+      else:
+        # check if any free electives are required
+        found = False
+        for key in required:
+          if key.find("Free Electives") != -1:
+            if key in completed:
+              completed[key] += int(tup[3])
+            else:
+              completed[key] = int(tup[3])
+            if isinstance(required[key], str):
+              uoc = required[key].split(' ')
+            else:
+              uoc = [required[key][0]]
+            print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:2s}  {tup[3]:2d}uoc towards Free Electives")
+            total_uoc += int(tup[3])
+            if len(uoc) == 3:
+              if key in left and completed[key] >= int(uoc[0]):
+                left.pop(key)
+            elif len(uoc) == 2 and uoc[0] == '<':
+              if key in left and completed[key] >= int(uoc[1]):
+                left.pop(key)
+            found = True
+            break
+        # if the subject does not satisfy any rules
+        if found == False:
+          zero = '0'
+          print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {grade:3s}  0uoc does not satisfy any rule")
+  cur.close()
+  print(f"UOC = {total_uoc} so far")
+  print()
+  # loop through completed subjects to re-format and apply changes to leftover dictionary
+  for key in completed:
+    if key in left:
+      if isinstance(left[key], str):
+        reqs = left[key].split(' ')
+      else:
+        reqs = [left[key][0]]
+      if len(reqs) == 3 and reqs[0] == reqs[2]:
+        left[key] = int(reqs[0]) - completed[key]
+      elif len(reqs) == 3:
+        left[key] = [int(reqs[0]) - completed[key], int(reqs[2]) - completed[key]]
+      elif len(reqs) == 1:
+        left[key][0] = int(reqs[0]) - completed[key]
+      elif len(reqs) == 2 and reqs[0] == '>':
+        left[key] = '> ' + str(int(reqs[1]) - completed[key])
+      else:
+        left.pop(key)
+      if isinstance(left[key], int) and left[key] <= 0:
+        left.pop(key)
+      if isinstance(left[key], str):
+        check_uoc = left[key].split(' ')
+        if len(check_uoc) == 2 and int(check_uoc[1]) <= 0:
+          left.pop(key)
+        elif len(check_uoc) == 1 and int(check_uoc[0]) <= 0:
+          left.pop(key)
+  # if the leftover dictionary is empty, student is eligible for graduation
+  if left == {}:
+    print("Eligible to graduate")
+  else: 
+    print("Remaining to complete degree:")
+  # find the courses to go 
+  specific = []
+  general = {}
+  # sort leftover dictionary 
+  sorted_left = sortLeftDict(db, left, program, stream)
+  for info in sorted_left:
+    if isinstance(sorted_left[info], str):
+      general[info] = sorted_left[info]
+    elif isinstance(sorted_left[info], int):
+      general[info] = str(sorted_left[info])
+    elif isinstance(sorted_left[info][1], list):
+      for subject in sorted_left[info][1]:
+        specific.append(subject)
+    else:
+      general[info] = str(sorted_left[info][0]) + ' < ' + str(sorted_left[info][1])
+  # print out the remaining required courses to complete the degree
+  for subject in specific:
+    x = checkSpecialCase(db, subject)
+    if checkSpecialCase(db, subject) != None:
+      x = x[1:len(x) - 1]
+      x = x.split(";")
+      if str(getCourseName(db, x[0])) == '':
+        name1 = '???'
+      else:
+        name1 = str(getCourseName(db, x[0]))
+      if str(getCourseName(db, x[1])) == '':
+        name2 = '???'
+      else:
+        name2 = str(getCourseName(db, x[1]))
+      x = x[0] + ' ' + name1 + '\n  ' + 'or ' + x[1] + ' ' + name2
+      print(f"- {x}")
+    else:
+      cur = db.cursor()
+      query = "select name from Subjects where code = %s"
+      cur.execute(query, [subject])
+      tup = cur.fetchone()
+      print(f"- {subject} {tup[0]}")
+      cur.close()
+  for data in general:
+    uoc = general[data].split(' ')
+    if data.find('Free Electives') != -1:
+      data = 'Free Electives'
+    if len(uoc) == 3:
+      if uoc[0] == uoc[2] and data == 'ADK Courses':
+        print(f"{uoc[0]} UOC from {data}")
+      elif uoc[0] == uoc[2] and ofOrFrom(db, data):
+        print(f"{uoc[0]} UOC of {data}")
+      elif uoc[0] == uoc[2]:
+        print(f"{uoc[0]} UOC courses from {data}")
+      else:
+        print(f"between {uoc[0]} and {uoc[2]} UOC courses from {data}")
+    elif len(uoc) == 2:
+      if uoc[0] == '>' and data == 'ADK Courses':
+        print(f"at least {uoc[1]} UOC from {data}")
+      elif uoc[0] == '>' and ofOrFrom(db, data):
+        print(f"at least {uoc[1]} UOC of {data}")
+      elif uoc[0] == '>':
+        print(f"at least {uoc[1]} UOC courses from {data}")
+    else:
+      if data == 'ADK Courses':
+        print(f"{uoc[0]} UOC from {data}")
+      elif ofOrFrom(db, data):
+        print(f"{uoc[0]} UOC of {data}")
+      else:
+        print(f"{uoc[0]} UOC courses from {data}")
+
+except Exception as err:
+  print("DB error: ", err)
+finally:
+  if db:
+    db.close()

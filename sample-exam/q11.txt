@@ -1,0 +1,12 @@
+# COMP3311 20T3 Final Exam Q11
+
+(a)
+A -> BC
+DE -> F
+ADE -> G
+
+(b)
+
+
+(c)
+

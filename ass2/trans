@@ -1,0 +1,86 @@
+#!/usr/bin/python3
+# COMP3311 21T3 Ass2 ... print a transcript for a given student
+
+import sys
+import psycopg2
+import re
+from helpers import getStudent, printStudentInfo, getSubjectInfo, sortEnrolment
+
+# define any local helper functions here
+
+### set up some globals
+UOC = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-', 'HD', 'DN', 'CR', 'PS', 'XE', 'T', 'SY', 'EC', 'NC']
+WAM = ['HD', 'DN', 'CR', 'PS', 'AF', 'FL', 'UF']
+ZERO = ['AF', 'FL', 'UF']
+NOTHING = ['AS', 'AW', 'PW', 'RD', 'NF', 'LE', 'PE', 'WD', 'WJ']
+DASH = '-'
+
+usage = f"Usage: {sys.argv[0]} zID"
+db = None
+
+### process command-line args
+
+argc = len(sys.argv)
+if argc < 2:
+  print(usage)
+  exit(1)
+zid = sys.argv[1]
+if zid[0] == 'z':
+  zid = zid[1:8]
+digits = re.compile("^\d{7}$")
+if not digits.match(zid):
+  print(f"Invalid student ID {zid}")
+  exit(1)
+
+# manipulate database
+
+try:
+  db = psycopg2.connect("dbname=mymyunsw")
+  stuInfo = getStudent(db,zid)
+  if not stuInfo:
+    print(f"Invalid student ID {zid}")
+    exit()
+
+  #print(stuInfo) # debug
+  # Print transcript for Student
+  # ... add your code here ...
+  cur = db.cursor()
+  printStudentInfo(db, zid)
+  # obtain student's enrolment information
+  query = "select Course_enrolments.course, Course_enrolments.mark, Course_enrolments.grade, Subjects.uoc from Course_enrolments join Courses on Course_enrolments.course = Courses.id join Subjects on Subjects.id = Courses.subject where Course_enrolments.student = %s"
+  cur.execute(query, [zid])
+  total_attempted_uoc = 0
+  total_achieved_uoc = 0
+  weighted_mark_sum = 0
+  info = cur.fetchall()
+  # sort student enrolment
+  info = sortEnrolment(db, info)
+  # loop through all subjects and print suitable transcript information
+  for tup in info:
+    subject = getSubjectInfo(db, tup[0])
+    mark = tup[1]
+    if mark is None:
+      mark = DASH
+    if tup[2] in ZERO:
+      print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {tup[2]:2s}   fail")
+    elif tup[2] in NOTHING:
+      print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {tup[2]:2s}")
+    else:
+      print(f"{subject[0]} {subject[1]} {subject[2]:<32s}{mark:>3} {tup[2]:2s}  {tup[3]:2d}uoc")
+    if tup[2] in UOC:
+      total_achieved_uoc += tup[3]
+    if tup[2] in WAM:
+      total_attempted_uoc += tup[3]
+    if tup[2] in WAM and tup[1] is not None:
+      weighted_mark_sum += tup[3] * tup[1]
+  if total_attempted_uoc != 0:
+    print(f"UOC = {total_achieved_uoc}, WAM = {round(weighted_mark_sum / total_attempted_uoc, 1)}")
+  else:
+    print(f"UOC = {total_achieved_uoc}, WAM = 0")
+
+except Exception as err:
+  print("DB error: ", err)
+finally:
+  if db:
+    db.close()
+

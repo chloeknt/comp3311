@@ -1,0 +1,17 @@
+                 Table "public.orgunits"
+  Column  |    Type     | Collation | Nullable | Default 
+----------+-------------+-----------+----------+---------
+ id       | integer     |           | not null | 
+ utype    | integer     |           | not null | 
+ name     | text        |           | not null | 
+ longname | text        |           |          | 
+ unswid   | shortstring |           |          | 
+Indexes:
+    "orgunits_pkey" PRIMARY KEY, btree (id)
+Referenced by:
+    TABLE "affiliations" CONSTRAINT "affiliations_orgunit_fkey" FOREIGN KEY (orgunit) REFERENCES orgunits(id)
+    TABLE "orgunit_groups" CONSTRAINT "orgunit_groups_member_fkey" FOREIGN KEY (member) REFERENCES orgunits(id)
+    TABLE "orgunit_groups" CONSTRAINT "orgunit_groups_owner_fkey" FOREIGN KEY (owner) REFERENCES orgunits(id)
+    TABLE "streams" CONSTRAINT "streams_offeredby_fkey" FOREIGN KEY (offeredby) REFERENCES orgunits(id)
+    TABLE "subjects" CONSTRAINT "subjects_offeredby_fkey" FOREIGN KEY (offeredby) REFERENCES orgunits(id)
+
