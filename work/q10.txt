@@ -1,0 +1,37 @@
+# COMP3311 21T3 Final Exam Q10
+# BCNF normalization
+
+(A)
+A -> B, C
+D -> E, F
+
+(B)
+ABCDEF
+choosing one to start with:
+1. A -> B, C - violates BCNF, LHS is partial key
+2. D -> E, F
+3. A -> D
+
+ABC |  A -> B, C - does not violate BCNF
+
+ADEF |  D -> E, F - violates BCNF, LHS is partial key
+     |  A -> D 
+     
+DEF | D -> E, F - does not violate BCNF
+
+AD | A -> D - does not violate BCNF
+
+Final result:
+Students: A, B, C
+Supervisors: D, E, F, A
+
+
+(C)
+The first table represents the students in the database, who can be 
+uniquely identified with their ID number, and have a name and thesis topic
+
+The second table represents the supervisors in the database, who can be
+uniquely identified with their ID number, have a name, a student they're
+assigned to and specialty
+
+

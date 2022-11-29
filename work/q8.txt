@@ -1,0 +1,22 @@
+# COMP3311 21T3 Final Exam Q8
+# Query execution times
+
+(A)
+When the server is first started, the execution plan needs to 
+be generated and cached by SQL. The file system also needs to 
+load the PostgreSQL files into memory. After the query is run, 
+the files are loaded into memory already and subsequent
+runs will utilise the same execution plan and thus be more efficient.
+
+
+(B)
+The first query is faster because it determines the maximum id
+from an integer value. The second query requires the maximum of
+date values, which have multiple components (year, month, day). 
+The components need to be run through individually to consider
+the overall maximum, as a single component being larger doesn't
+necessarily mean the overall date is more recent. 
+
+
+
+

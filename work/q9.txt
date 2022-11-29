@@ -1,0 +1,40 @@
+# COMP3311 21T3 Final Exam Q9
+# Flight booking triggers
+
+(A)
+The pre_booking_check function determines if:
+	1. The flight number is valid within the database
+	2. The flight is already full 
+and raises an exception in either case. Otherwise, either the new or old 
+data is returned depending on if the flight was 'DELETED' or 'INSERTED'
+
+(B)
+Other conditions that could be checked include:
+	1. The booking was made after the flight has already departed
+	2. The seat number exists in the aircraft
+
+
+(C)
+1. The first trigger executes the pre_booking_check function and no exception
+is raised
+2. A new booking is inserted into the Bookings table where flight_no = QF02
+passenger = John Smith and seat_no = 25-D. 
+3. The second trigger executes the post_booking_update function where the 
+flight with flight_no = QF02 is updated, the number of booked seats (nbooked) 
+increasing by one
+
+(D)
+1. The first trigger executes the pre_booking_check function and the exception
+'Booking error' is raised because the flight with flight_no = QF02 is full
+2. No booking is inserted into the Booking table
+
+(E)
+1. The first trigger executes the pre_booking_check function and no exception
+is raised
+2. The old booking is deleted from the Bookings table where flight_no = QF03
+and seat_no = 15-F. 
+3. The second trigger executes the post_booking_update function where the 
+flight with flight_no = QF03 is updated, the number of booked seats (nbooked) 
+decreasing by one
+
+

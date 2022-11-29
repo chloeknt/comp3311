@@ -1,0 +1,21 @@
+# COMP3311 21T3 Final Exam Q7
+# Python/Psycopg2 scripts
+
+(A)
+Yes, the two scripts would produce the same output, the term code per term
+and the subject code and name for each subject in each term the student is
+enrolled in for all terms the student has been enrolled.
+
+(B)
+Script A: 11
+
+Script B: 1
+
+
+(C)
+The second script, as it carries out less execute() methods, which takes 
+longer. Script A carries out the execute() method eleven times, ten
+more times than Script B.
+
+
+

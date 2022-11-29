@@ -1,0 +1,142 @@
+#!/usr/bin/python3
+# COMP3311 21T3 exam ... property finder
+
+import sys
+import psycopg2
+import re
+
+# define any local helper functions here
+# Helper to retrieve all information needed to check against criteria
+def getBedrooms(propID):
+  cur = db.cursor()
+  cur.execute("select number from Features where property = %s and feature = 'bedrooms'", [propID])
+  info = cur.fetchone()
+  cur.close
+  if info is None:
+    return None
+  return info[0]
+
+def getBathrooms(propID):
+  cur = db.cursor()
+  cur.execute("select number from Features where property = %s and feature = 'bathrooms'", [propID])
+  info = cur.fetchone()
+  cur.close
+  if info is None:
+    return None
+  return info[0]
+
+def getCarspaces(propID):
+  cur = db.cursor()
+  cur.execute("select number from Features where property = %s and feature = 'carspaces'", [propID])
+  info = cur.fetchone()
+  cur.close
+  if info is None:
+    return None
+  return info[0]
+
+def getPropInfo(propID):
+  cur = db.cursor()
+  cur.execute("select Properties.ptype, Properties.list_price from Properties where Properties.id = %s",[propID])
+  info = cur.fetchone()
+  cur.close()
+  return info
+  
+def getAptAddress(propID):
+  cur = db.cursor()
+  cur.execute("select address from apartmentInfo where id = %s", [propID])
+  info = cur.fetchone()
+  cur.close
+  return info
+  
+def getHouseAddress(propID):
+  cur = db.cursor()
+  cur.execute("select address from houseInfo where id = %s", [propID])
+  info = cur.fetchone()
+  cur.close
+  return info
+
+### set up some globals
+
+usage = f"Usage: {sys.argv[0]} type maxPrice #beds #baths #cars\n"\
+f"type is one of Apartment, House, Townhouse\n"\
+"maxPrice is upper bound; #x = exact match; 0 means don't care"
+
+types = ["Apartment", "House", "Townhouse"]
+db = None
+
+### process command-line args
+
+argc = len(sys.argv)
+if argc < 6:
+  print(usage)
+  exit(1)
+ptype = sys.argv[1]
+if not ptype in types:
+  print(usage)
+  exit(1)
+digits = re.compile("^\d+$")
+for arg in sys.argv[2:5]:
+  if not digits.match(arg):
+    print(usage)
+    exit(1)
+
+maxPrice = int(sys.argv[2])
+nbeds = int(sys.argv[3])
+nbaths = int(sys.argv[4])
+ncars = int(sys.argv[5])
+
+# manipulate database
+
+try:
+  db = psycopg2.connect("dbname=property")
+  acceptable = []
+  cur = db.cursor()
+  cur.execute("select id from Properties where Properties.sold_date is null order by list_price, id")
+  for propID in cur.fetchall():
+    data = getPropInfo(propID[0])
+    beds = getBedrooms(propID[0])
+    baths = getBathrooms(propID[0])
+    cars = getCarspaces(propID[0])
+    if beds is None and nbeds != 0:
+      pass
+    elif baths is None and nbaths != 0:
+      pass
+    elif cars is None and ncars != 0:
+      pass
+    elif ptype != data[0]:
+      pass
+    elif maxPrice < data[1]:
+      pass
+    elif nbeds != 0 and nbeds != beds:
+      pass
+    elif nbaths != 0 and nbaths != baths:
+      pass
+    elif ncars != 0 and ncars != cars:
+      pass
+    else:
+      acceptable.append(propID[0])
+  cur.close()
+  for prop in acceptable:
+    price = getPropInfo(prop)
+    beds = getBedrooms(prop)
+    baths = getBathrooms(prop)
+    cars = getCarspaces(prop)
+    if beds is None:
+      beds = 0
+    if baths is None:
+      baths = 0
+    if cars is None:
+      cars = 0
+    if ptype == 'Apartment':
+    	address = getAptAddress(prop)
+    	print(f"#{prop}: {address[0]}, {beds}br, {baths}ba, {cars}car, ${price[1]}")
+    else:
+    	address = getHouseAddress(prop)
+    	print(f"#{prop}: {address[0]}, {beds}br, {baths}ba, {cars}car, ${price[1]}")
+
+except Exception as err:
+  print("DB error: ", err)
+finally:
+  if db:
+    db.close()
+
