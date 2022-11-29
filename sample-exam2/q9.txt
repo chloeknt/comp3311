@@ -1,0 +1,58 @@
+# COMP3311 20T3 Final Exam Q9
+
+(a)
+create trigger disbandGroup 
+after update on MemberOf
+for each row 
+execute procedure disbandGroup();
+
+create function disbandGroup() returns trigger 
+as $$
+declare
+    status date;
+    disband boolean := True;
+    info record;
+begin
+    for info in 
+        select departed into status from 
+        Memberof where Memberof.in_group = old.in_group and Memberof.performer
+        <> old.performer
+    loop
+        if status is not null:
+            disband := False;
+    end loop;
+    if disband = True:
+        update Groups set disbanded = new.departed where Groups.id = old.in_group
+    return new
+end;
+$$ language plpgsql;
+
+
+(b)
+create trigger renameGroup 
+after update on Groups
+for each row 
+execute procedure disbandGroup();
+
+create function disbandGroup() returns trigger 
+as $$
+declare
+    status date;
+    disband boolean := True;
+    info record;
+begin
+    for info in 
+        select departed into status from 
+        Memberof where Memberof.in_group = old.in_group and Memberof.performer
+        <> old.performer
+    loop
+        if status is not null:
+            disband := False;
+    end loop;
+    if disband = True:
+        update Groups set disbanded = new.departed where Groups.id = old.in_group
+    return new
+end;
+$$ language plpgsql;
+
+

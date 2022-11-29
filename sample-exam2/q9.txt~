@@ -1,0 +1,27 @@
+# COMP3311 20T3 Final Exam Q9
+
+(a)
+create trigger disbandGroup 
+after update on MemberOf
+for each row 
+execute procedure disbandGroup();
+
+create function disbandGroup() returns trigger 
+as $$
+declare
+    status date;
+    info record;
+begin
+    for info in 
+        select departed into status from 
+        Memberof where Memberof.in_group = old.in_group
+    
+    
+end;
+$$ language plpgsql
+
+
+(b)
+
+
+

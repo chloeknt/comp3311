@@ -1,0 +1,61 @@
+#!/usr/bin/python3
+# COMP3311 20T2 Final Exam
+# Q7: tracklist for album, given by Albums.id
+#     show performers/instruments for each track
+
+import sys
+import psycopg2
+
+# ... put helper functions here ...
+def findAlbum(albumID):
+   cur = db.cursor()
+   cur.execute("select title, year, genre from Albums where id = %s",[albumID])
+   info = cur.fetchone()
+   cur.close()
+   if not info:
+     return None
+   else:
+     return info
+    
+def printPerformers(songID):
+   cur = db.cursor()
+   cur.execute("select Performers.name, string_agg(Playson.instrument, ',' order by Playson.instrument) from Performers join Playson on Performers.id = Playson.performer where song = %s group by Performers.name",[songID])
+   for info in cur.fetchall():
+      print(f"        {info[0]}: {info[1]}")
+   cur.close()
+
+db = None
+cur = None
+usage = f"Usage: {sys.argv[0]} AlbumID"
+
+# process command-line args
+
+if len(sys.argv) < 2:
+   print(usage)
+   exit(1)
+albumID = sys.argv[1]
+if not albumID.isnumeric():
+   print(usage)
+   exit(1)
+
+try:
+   db = psycopg2.connect("dbname=music")
+   albumInfo = findAlbum(albumID)
+   if albumInfo is None:
+      print("Invalid album ID")
+      exit()
+   cur = db.cursor()
+   cur.execute("select trackno, title, id from Songs where on_album = %s",[albumID])
+   for info in cur.fetchall():
+      print(f"{info[0]:>2}. {info[1]}")
+      printPerformers(info[2])
+   cur.close()
+
+except psycopg2.Error as err:
+   print("DB error: ", err)
+finally:
+   if cur:
+       cur.close()
+   if db:
+      db.close()
+

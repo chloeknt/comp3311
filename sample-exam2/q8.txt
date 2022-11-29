@@ -1,0 +1,44 @@
+# COMP3311 20T3 Final Exam Q8
+
+(a) 
+create table U (
+    id  serial primary key,
+    m   text,
+    a   integer not null,
+    b   text not null
+);
+
+create table m (
+    id  serial references U(id),
+    m   text,
+    primary key (id, m)
+);
+
+(b)
+create table S (
+    id serial primary key,
+    R integer not null,
+    foreign key (R) references T(id)
+);
+
+create table T (
+    id serial primary key
+);
+
+
+(c)
+create table P (
+    id      serial primary key,
+    e       text not null,
+    dtype   char(1) not null
+                check (dtype in ('Q1','Q2','Q3')),
+    f       integer,
+    g       integer,
+    constraint subclasses check 
+            ((dtype = 'Q1' and g is null and f is not null)
+            or
+            (dtype = 'Q2' and f is null and g is not null)
+            or 
+            (dtype = 'Q3' and g is null and f is null))
+);
+

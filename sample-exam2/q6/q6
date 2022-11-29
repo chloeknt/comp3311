@@ -1,0 +1,68 @@
+#!/usr/bin/python3
+# COMP3311 20T2 Final Exam
+# Q6: discography for one group, given by Groups.id
+
+import sys
+import psycopg2
+
+# ... put helper functions here ...
+def findGroup(groupId):
+	cur = db.cursor()
+	cur.execute("select name from Groups where id = %s",[groupId])
+	info = cur.fetchone()
+	cur.close()
+	if not info:
+		return None
+	else:
+		return info[0]
+
+def printSongs(albumId):
+	cur = db.cursor()
+	cur.execute("select trackno, title, length from Songs where on_album = %s",[albumId])
+	for info in cur.fetchall():
+		minutes = int(info[2] / 60)
+		seconds = info[2] % 60
+		if seconds > 9:
+			print(f"{info[0]:>2}. {info[1]} ({minutes}:{seconds})")
+		else:
+			print(f"{info[0]:>2}. {info[1]} ({minutes}:0{seconds})")
+	cur.close()
+
+db = None
+cur = None
+usage = f"Usage: {sys.argv[0]} GroupID"
+
+# process command-line args
+
+if len(sys.argv) < 2:
+	print(usage)
+	exit(1)
+groupID = sys.argv[1]
+if not groupID.isnumeric():
+	print(usage)
+	exit(1)
+
+try:
+	db = psycopg2.connect("dbname=music")
+	groupName = findGroup(groupID)
+	if groupName is None:
+		print("Invalid group ID")
+		exit()
+	print(f"Discography for {groupName}")
+	cur = db.cursor()
+	cur.execute("select id, title, year, genre from Albums where made_by = %s",[groupID])
+	for info in cur.fetchall():
+		print("--------------------")
+		print(f"{info[1]} ({info[2]}) ({info[3]})")
+		print("--------------------")
+		printSongs(info[0])
+	cur.close()  
+
+except psycopg2.Error as err:
+	print("DB error: ", err)
+finally:
+	if cur:
+		cur.close()
+	if db:
+		db.close()
+
