@@ -1,0 +1,111 @@
+#!/usr/bin/python3
+# COMP3311 20T2 Final Exam
+# Q6: print match reports for a specified team in a given year
+
+import sys
+import psycopg2
+
+# Helper to verify team name and if found return team id
+def isTeam(team):
+   cur = db.cursor()
+   cur.execute("select id from Teams where country = %s",[team])
+   info = cur.fetchone()
+   cur.close()
+   if not info:
+      return None
+   else:
+      return info[0]
+
+# Helper to get team name
+def getTeamName(t_id):
+   cur = db.cursor()
+   cur.execute("select country from Teams where id = %s", [t_id])
+   info = cur.fetchone()
+   cur.close()
+   return info[0]
+
+# Helper to find the rival team for a particular match
+def playedAgainst(team, match):
+   cur = db.cursor()
+   cur.execute("select team from Involves where match = %s and team <> %s", [match, team])
+   info = cur.fetchone()
+   cur.close()
+   return info[0]
+
+def matchInfo(match):
+   cur = db.cursor()
+   cur.execute("select city, playedon from Matches where id = %s", [match])
+   info = cur.fetchone()
+   cur.close()
+   return info
+
+def isPartOfTeam(player, team):
+   cur = db.cursor()
+   cur.execute("select * from IsPlayerOfTeam(%s, %s)", [player, team])
+   info = cur.fetchone()
+   cur.close()
+   return info[0]
+
+def matchGoals(t_id, match):
+   ngoals = 0
+   cur = db.cursor()
+   cur.execute("select scoredby from Goals where scoredin = %s", [match])
+   for info in cur.fetchall():
+      if isPartOfTeam(info[0], t_id):
+         ngoals += 1
+   cur.close()
+   return ngoals
+
+def playedRes(match):
+   cur = db.cursor()
+   cur.execute("select  from Matches where match = %s", [match])
+   info = cur.fetchone()
+   cur.close()
+   return info
+
+db = None
+cur = None
+
+if len(sys.argv) < 3:
+   print(f"Usage: {sys.argv[0]} TeamName Year")
+   exit(1)
+team = sys.argv[1]
+year = sys.argv[2]
+if not year.isnumeric():
+   print(f"Invalid year {year}")
+   exit(1)
+
+try:
+   db = psycopg2.connect("dbname=footy")
+   t1_id = isTeam(team)
+   if t1_id is None:
+      print(f"No team {team}")
+      exit()
+   cur = db.cursor()
+   query = "select match from Involves where team = %s"
+   cur.execute(query, [t1_id])
+   for info in cur.fetchall():
+      t2_id = playedAgainst(t1_id, info[0])
+      m_against = getTeamName(t2_id)
+      m_city = matchInfo(info[0])[0]
+      m_date = str(matchInfo(info[0])[1])
+      dates = m_date.split('-')
+      if dates[0] == year:
+         t1_goals = matchGoals(t1_id, info[0])
+         t2_goals = matchGoals(t2_id, info[0])
+         m_res = 'drew'
+         if t1_goals > t2_goals:
+            m_res = 'won'
+         elif t2_goals > t1_goals:
+            m_res = 'lost'
+         m_score = str(t1_goals) + '-' + str(t2_goals)
+         print(f"played {m_against} in {m_city} on {m_date} and {m_res} {m_score}")
+   cur.close()
+
+except psycopg2.Error as err:
+	print("DB error: ", err)
+finally:
+   if db:
+      db.close()
+   if cur:
+      cur.close()

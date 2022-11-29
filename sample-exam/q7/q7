@@ -1,0 +1,76 @@
+# COMP3311 20T2 Final Exam
+# Q7: print a specified player's career performance
+
+import sys
+import psycopg2
+
+def playerExists(player):
+   cur = db.cursor()
+   cur.execute("select id from Players where name = %s", [player])
+   info = cur.fetchone()
+   cur.close()
+   if not info:
+      return None
+   else:
+      return info[0]
+
+def matchInfo(match):
+   cur = db.cursor()
+   cur.execute("select city, playedon from Matches where id = %s", [match])
+   info = cur.fetchone()
+   cur.close()
+   return info
+
+def getTeamInfo(p_id):
+   cur = db.cursor()
+   cur.execute("select Teams.country, Teams.id from Teams join Players on Teams.id = Players.memberof where Players.id = %s", [p_id])
+   info = cur.fetchone()
+   cur.close()
+   return info
+
+def getNumMatches(t_id):
+   cur = db.cursor()
+   cur.execute("select count(*) from Involves where team = %s", [t_id])
+   info = cur.fetchone()
+   cur.close()
+   return info
+
+db = None
+cur = None
+
+if len(sys.argv) < 2:
+   print(f"Usage: {sys.argv[0]} PlayerName")
+   exit(1)
+player = sys.argv[1]
+
+try:
+   db = psycopg2.connect("dbname=footy")
+   p_id = playerExists(player)
+   if p_id is None:
+      print("No such player")
+      exit()
+   total_goals = 0
+   cur = db.cursor()
+   query = "select scoredin, scoredby, count from goalsOrderedByDate where scoredby = %s"
+   cur.execute(query, [p_id])
+   for info in cur.fetchall():
+      m_city = matchInfo(info[0])[0]
+      m_date = str(matchInfo(info[0])[1])
+      if info[2] > 1: 
+         print(f"played in {m_city} on {m_date} and scored {info[2]} goals")
+      else:
+         print(f"played in {m_city} on {m_date} and scored {info[2]} goal")
+      total_goals += 1
+   team = getTeamInfo(p_id)[0]
+   n_matches = getNumMatches(getTeamInfo(p_id)[1])[0]
+   print(f"Summary: played for {team}, {n_matches} matches, {total_goals} goals")
+   cur.close
+
+except psycopg2.Error as err:
+	print("DB error: ", err)
+finally:
+   if cur:
+       cur.close()
+   if db:
+      db.close()
+       

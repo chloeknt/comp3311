@@ -1,0 +1,120 @@
+# COMP3311 20T3 Final Exam Q9
+
+(a)
+
+create or replace function fixCoursesOnAddCourseEnrolment() returns trigger
+... add rest of function definition here ...
+as $$
+declare 
+    _nS integer; _nE integer; _sum integer; _avg float;
+begin
+    -- This grabs the values from the course
+    select nS, nE, avgEval into _nS, _nE, _avg
+    from Couses where id=new.course;
+    -- Add one more student (A new student has enrolled in this course)
+    _ns := _ns + 1;
+    -- If the student has rated the course
+    if (new.stuEval is not NULL) then
+        -- Number of evaluations has increased
+        _nE := _nE + 1;
+        -- Check if this is a valid evaluation, if not 
+        if (_nS <= 10 or (3*_nE) <= _nS) then
+            -- Set average to null as the criteria has not been met yet
+            _avg : = null;
+        -- If conditions have been met
+        else
+            -- Get the total of student evaluations so far for the course
+            select sum(stuEval) into _sum 
+            from CourseEnrolments where course = new.course;
+            -- Add this new student evaluation to the course sum
+            _sum := _sum + new.stuEval
+            -- Find the average by dividing sum by the number of evaluations
+            _avg := _sum::float / _nE
+        end if;
+    end if;
+    -- Update the record for the course
+    update Courses set nS = _nS, nE = _nE, avgEval = _avg
+    where id=new.course;
+    -- 'After' trigger, so return is irrelevant
+    return new;
+end;
+$$
+language plpgsql;
+
+(b)
+
+create or replace function fixCoursesOnDropCourseEnrolment() returns trigger
+... add rest of function definition here ...
+as $$
+declare 
+    _nS integer; _nE integer; _sum integer; _avg float;
+begin
+    -- This grabs the values from the course
+    select nS, nE, avgEval into _nS, _nE, _avg
+    from Couses where id=old.course;
+    -- Remove one student (A new student has dropped in this course)
+    _ns := _ns - 1;
+    -- If the student has rated the course
+    if (old.stuEval is not NULL) then
+        -- Number of evaluations has decreased
+        _nE := _nE - 1;
+        -- Check if this is a valid evaluation, if not 
+        if (_nS <= 10 or (3*_nE) <= _nS) then
+            -- Set average to null as the criteria has not been met yet
+            _avg : = null;
+        -- If conditions have been met
+        else
+            -- Get the total of student evaluations so far for the course
+            select sum(stuEval) into _sum 
+            from CourseEnrolments where course = old.course;
+            -- Remove this student evaluation from the course sum
+            _sum := _sum - old.stuEval
+            -- Find the average by dividing sum by the number of evaluations
+            _avg := _sum::float / _nE
+        end if;
+    end if;
+    -- Update the record for the course
+    update Courses set nS = _nS, nE = _nE, avgEval = _avg
+    where id=new.course;
+    -- 'After' trigger, so return is irrelevant
+    return new;
+end;
+$$
+language plpgsql;
+
+(c)
+
+create or replace function fixCoursesOnModCourseEnrolment() return trigger
+... add rest of function definition here ...
+as $$
+declare 
+    oldEval integer; newEval integer;
+    _nS integer; _nE integer; _sum integer; _avg float;
+begin
+    -- This grabs the values from the course
+    select nS, nE, avgEval into _nS, _nE, _avg
+    from Couses where id=old.course;
+    -- Don't change the number of students
+    -- If the student has not rated the course previously and now has
+    if (old.stuEval is NULL and new.stuEval is not NULL) then
+        -- Number of evaluations increases
+        _nE := _nE + 1;
+    end if;
+    -- Grab the old and new evaluations if they exist
+    oldEval := coalesce(old.stuEval, 0)
+    newEval := coalesce(new.stuEval, 0)
+    -- If the new and old evaluations differ
+    if (oldEval <> newEval) then
+        -- Remove the old evaluation and add the new one to the sum 
+        select sum(stuEval) into _sum
+        from CoursesEnrolments where course=old.course;
+        _avg := (_sum - oldEval + newEval)::float / _nE
+    end if;
+    -- Update the record for the course
+    update Courses set nS = _nS, nE = _nE, avgEval = _avg
+    where id=new.course;
+    -- 'After' trigger, so return is irrelevant
+    return new;
+end;
+$$
+language plpgsql;
